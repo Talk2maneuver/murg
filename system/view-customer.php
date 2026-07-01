@@ -23,6 +23,7 @@ $actual_total_deposits = $total_deposits_data['total'] ?? 0;
 // Date range filter logic
 $from_date = $_GET['from_date'] ?? '';
 $to_date = $_GET['to_date'] ?? '';
+$active_tab = $_GET['tab'] ?? 'orders'; // Default to orders tab
 $date_filter_orders = "";
 $date_filter_deposits = "";
 if (!empty($from_date) && !empty($to_date)) {
@@ -182,8 +183,9 @@ if(isset($_GET['del_dep'])) {
 
                         <!-- Filter Section -->
                         <div class="widget-content widget-content-area mb-3">
-                            <form action="" method="GET" class="form-row align-items-end">
+                            <form action="" method="GET" class="form-row align-items-end" id="filterForm">
                                 <input type="hidden" name="id" value="<?php echo $did; ?>">
+                                <input type="hidden" name="tab" id="activeTab" value="orders">
                                 <div class="col-md-3 mb-2">
                                     <label for="from_date">From Date</label>
                                     <input type="date" name="from_date" id="from_date" class="form-control" value="<?php echo $from_date; ?>">
@@ -205,16 +207,16 @@ if(isset($_GET['del_dep'])) {
                         <div class="widget-content widget-content-area">
                             <ul class="nav nav-tabs" id="myTab" role="tablist">
                                 <li class="nav-item">
-                                    <a class="nav-link active" id="orders-tab" data-toggle="tab" href="#orders" role="tab" aria-controls="orders" aria-selected="true">Orders History</a>
+                                    <a class="nav-link <?php echo $active_tab == 'orders' ? 'active' : ''; ?>" id="orders-tab" data-toggle="tab" href="#orders" role="tab" aria-controls="orders" aria-selected="<?php echo $active_tab == 'orders' ? 'true' : 'false'; ?>">Orders History</a>
                                 </li>
                                 <li class="nav-item">
-                                    <a class="nav-link" id="deposit-tab" data-toggle="tab" href="#deposit" role="tab" aria-controls="deposit" aria-selected="false">Deposit History</a>
+                                    <a class="nav-link <?php echo $active_tab == 'deposit' ? 'active' : ''; ?>" id="deposit-tab" data-toggle="tab" href="#deposit" role="tab" aria-controls="deposit" aria-selected="<?php echo $active_tab == 'deposit' ? 'true' : 'false'; ?>">Deposit History</a>
                                 </li>
                             </ul>
-                            
+                             
                             <div class="tab-content" id="myTabContent">
                                 <!-- Orders Tab -->
-                                <div class="tab-pane fade show active" id="orders" role="tabpanel" aria-labelledby="orders-tab">
+                                <div class="tab-pane fade <?php echo $active_tab == 'orders' ? 'show active' : ''; ?>" id="orders" role="tabpanel" aria-labelledby="orders-tab">
                                     <div class="table-responsive mt-3">
                                         <table id="orders-table" class="table table-hover non-hover" style="width:100%">
                                             <thead>
@@ -236,15 +238,30 @@ if(isset($_GET['del_dep'])) {
                                             </thead>
                                         <tbody>
                                         <?php
-                                        $date = date('Y-m-d');
-                                            $facilityID = $_SESSION['facilityID'];
-                                        $sql=mysqli_query($con,"select * from orders where customerID='$did'  and facilityID ='$facilityID' $date_filter_orders ORDER BY creation DESC");
+                                         $date = date('Y-m-d');
+                                         $facilityID = $_SESSION['facilityID'];
+                                         $limit_sql = "";
+                                         if (empty($from_date) || empty($to_date)) {
+                                             $order_ids_q = mysqli_query($con, "SELECT DISTINCT orderID FROM orders WHERE customerID='$did' AND facilityID='$facilityID' ORDER BY creation DESC LIMIT 5");
+                                             $order_ids = [];
+                                             while ($r = mysqli_fetch_assoc($order_ids_q)) {
+                                                 $order_ids[] = "'" . mysqli_real_escape_string($con, $r['orderID']) . "'";
+                                             }
+                                             if (!empty($order_ids)) {
+                                                 $limit_sql = " AND orderID IN (" . implode(",", $order_ids) . ") ";
+                                             } else {
+                                                 $limit_sql = " AND 1=0 ";
+                                             }
+                                         }
+                                         $sql=mysqli_query($con,"select * from orders where customerID='$did'  and facilityID ='$facilityID' $date_filter_orders $limit_sql ORDER BY creation DESC");
                                         $cnt = 1;
                                         $currentOrderID = null;
                                         $discountShown = false;
                                         $grand_total_history = 0; // New variable for sum
+                                        $has_orders = false;
 
                                         while($row = mysqli_fetch_array($sql)) {
+                                            $has_orders = true;
                                             // Check if this is a new order
                                             if ($currentOrderID != $row['orderID']) {
                                                 $currentOrderID = $row['orderID'];
@@ -274,7 +291,7 @@ if(isset($_GET['del_dep'])) {
                                             ?></td>
                                             <td class="hidden-xs">₦<?php echo number_format($row['amount_paid'], 2);?></td>
                                             <td class="hidden-xs"><?php echo $row['payment'];?></td>
-                                            <td class="hidden-xs"><?php echo $row['creation'];?></td>
+                                            <td class="hidden-xs" data-order="<?php echo strtotime($row['creation']); ?>"><?php echo htmlspecialchars($row['creation']);?></td>
                                             <td>
                                                 <a href="edit-order-item?id=<?php echo $row['id']; ?>" class="btn btn-primary btn-sm">Edit</a>
                                                 <a href="view-customer?id=<?php echo $did; ?>&item_id=<?php echo $row['id']; ?>&del_order=1" onclick="return confirm('Are you sure you want to delete this order item?')" class="btn btn-danger btn-sm">Delete</a>
@@ -282,6 +299,18 @@ if(isset($_GET['del_dep'])) {
                                         </tr>
                                         <?php 
                                             $cnt=$cnt+1; 
+                                        }
+                                        
+                                        if (!$has_orders) {
+                                            ?>
+                                            <tr>
+                                                <td colspan="13" class="text-center py-4">
+                                                    <div class="alert alert-info mb-0">
+                                                        <i class="feather feather-info"></i> No order records found for this customer.
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <?php
                                         }
                                         ?>
                                    
@@ -299,7 +328,7 @@ if(isset($_GET['del_dep'])) {
                                 </div>
                                 
                                 <!-- Deposit History Tab -->
-                                <div class="tab-pane fade" id="deposit" role="tabpanel" aria-labelledby="deposit-tab">
+                                <div class="tab-pane fade <?php echo $active_tab == 'deposit' ? 'show active' : ''; ?>" id="deposit" role="tabpanel" aria-labelledby="deposit-tab">
                                     <div class="table-responsive mt-3">
                                         <table id="deposit-history" class="table table-bordered table-hover table-striped mb-4">
                                             <thead>
@@ -319,15 +348,15 @@ if(isset($_GET['del_dep'])) {
                                                 <?php
                                                 // Calculate running balances dynamically
                                                 $history_deposits = [];
-                                                // We need to fetch in ASC order to calculate running balance forward
-                                                $running_q = mysqli_query($con, "SELECT * FROM deposit_history WHERE customerID='$did' $date_filter_deposits ORDER BY deposit_date ASC, id ASC");
+                                                // We must fetch all deposits in ASC order to calculate running balance forward correctly
+                                                // Apply date filter if set
+                                                $deposit_filter = "";
+                                                if (!empty($from_date) && !empty($to_date)) {
+                                                    $deposit_filter = " AND DATE(deposit_date) BETWEEN '$from_date' AND '$to_date' ";
+                                                }
+                                                $running_q = mysqli_query($con, "SELECT * FROM deposit_history WHERE customerID='$did' $deposit_filter ORDER BY deposit_date ASC, id ASC");
                                                 
-                                                // Calculate footer total for filtered view
-                                                $filtered_total_q = mysqli_query($con, "SELECT SUM(amount) as total FROM deposit_history WHERE customerID='$did' $date_filter_deposits");
-                                                $filtered_total_data = mysqli_fetch_array($filtered_total_q);
-                                                $filtered_total_amount = $filtered_total_data['total'] ?? 0;
-                                                
-                                                // Starting point: Total debt before ANY deposits were made in this facility (independent of filter)
+                                                // Starting point: Total debt before ANY deposits were made in this facility
                                                 $temp_running_balance = $total_sales - $total_discount - $total_initial_paid;
                                                 
                                                 while ($d = mysqli_fetch_array($running_q)) {
@@ -340,10 +369,33 @@ if(isset($_GET['del_dep'])) {
                                                 // Reverse to display newest first
                                                 $history_deposits = array_reverse($history_deposits);
                                                 
+                                                // If no date filter is applied, only show the last 5
+                                                $filtered_total_amount = 0;
+                                                if (empty($from_date) && empty($to_date)) {
+                                                    $history_deposits = array_slice($history_deposits, 0, 5);
+                                                }
+                                                
+                                                // Sum the amount of deposits displayed
+                                                foreach ($history_deposits as $deposit) {
+                                                    $filtered_total_amount += floatval($deposit['amount']);
+                                                }
+                                                
+                                                if (empty($history_deposits)) {
+                                                    ?>
+                                                    <tr>
+                                                        <td colspan="9" class="text-center py-4">
+                                                            <div class="alert alert-info mb-0">
+                                                                <i class="feather feather-info"></i> No deposit records found for this customer.
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    <?php
+                                                }
+                                                
                                                 foreach ($history_deposits as $deposit) {
                                                 ?>
                                                 <tr>
-                                                    <td><?php echo date('d M Y h:i A', strtotime($deposit['deposit_date'])); ?></td>
+                                                    <td data-order="<?php echo strtotime($deposit['deposit_date']); ?>"><?php echo date('d M Y h:i A', strtotime($deposit['deposit_date'])); ?></td>
                                                     <td><?php echo htmlentities($deposit['transaction_id']); ?></td>
                                                     <td class="text-success">+₦<?php echo number_format($deposit['amount'], 2); ?></td>
                                                     <td><?php echo htmlentities($deposit['payment_method'] ?: 'N/A'); ?></td>
@@ -358,13 +410,13 @@ if(isset($_GET['del_dep'])) {
                                                 </tr>
                                                 <?php } ?>
                                             </tbody>
-                                            <tfoot>
-                                                <tr>
-                                                    <th colspan="2">Total Deposits:</th>
-                                                     <th>₦<?php echo number_format($filtered_total_amount, 2); ?></th>
-                                                    <th colspan="4"></th>
-                                                </tr>
-                                            </tfoot>
+                                             <tfoot>
+                                                 <tr>
+                                                     <th colspan="2">Total Deposits:</th>
+                                                      <th>₦<?php echo number_format($filtered_total_amount, 2); ?></th>
+                                                     <th colspan="6"></th>
+                                                 </tr>
+                                             </tfoot>
                                         </table>
                                     </div>
                                 </div>
@@ -398,6 +450,40 @@ if(isset($_GET['del_dep'])) {
         $(document).ready(function() {
             App.init();
             
+            // Set initial tab from URL parameter
+            var urlParams = new URLSearchParams(window.location.search);
+            var tabParam = urlParams.get('tab');
+            if (tabParam) {
+                $('#activeTab').val(tabParam);
+                $('.nav-tabs a[href="#' + tabParam + '"]').tab('show');
+            }
+            
+            // Tab state preservation
+            var hash = window.location.hash;
+            if (hash) {
+                $('.nav-tabs a[href="' + hash + '"]').tab('show');
+            }
+             $('.nav-tabs a').on('shown.bs.tab', function (e) {
+                 var targetTab = e.target.hash.replace('#', '');
+                 $('#activeTab').val(targetTab);
+                 window.location.hash = e.target.hash;
+                 // Adjust DataTable columns to prevent layout collapse in hidden tab
+                 if ($.fn.DataTable.isDataTable('#orders-table')) {
+                     $('#orders-table').DataTable().columns.adjust();
+                 }
+                 if ($.fn.DataTable.isDataTable('#deposit-history')) {
+                     $('#deposit-history').DataTable().columns.adjust();
+                 }
+             });
+            
+            // Append tab parameter to form action on submit
+            $('#filterForm').on('submit', function() {
+                var activeTab = $('#activeTab').val();
+                var action = $(this).attr('action') || '';
+                var separator = action.indexOf('?') === -1 ? '?' : '&';
+                $(this).attr('action', action + separator + 'tab=' + activeTab);
+            });
+            
             // Initialize orders datatable
             $('#orders-table').DataTable({
                 "dom": "<'dt--top-section'<'row'<'col-sm-12 col-md-6 d-flex justify-content-md-start justify-content-center'B><'col-sm-12 col-md-6 d-flex justify-content-md-end justify-content-center mt-md-0 mt-3'f>>>" +
@@ -411,7 +497,7 @@ if(isset($_GET['del_dep'])) {
                         { extend: 'print', className: 'btn btn-sm' }
                     ]
                 },
-                "order": [[2, "desc"]],
+                "order": [[11, "desc"]],
                 "oLanguage": {
                     "oPaginate": { 
                         "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', 

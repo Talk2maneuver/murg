@@ -150,7 +150,11 @@ if (strlen($_SESSION['email']) == 0) {
                                     </div>
                                     <div class="acc-action">
                                         <?php
-                                        $r_query = $con->query("SELECT SUM(buying * quantity) as 'buying' FROM stocks");
+                                        $facility_filter = "";
+                                        if (!empty($facilityID)) {
+                                            $facility_filter = " WHERE facilityID = '$facilityID' ";
+                                        }
+                                        $r_query = $con->query("SELECT SUM(buying * quantity) as 'buying' FROM stocks $facility_filter");
                                         $r_row = $r_query->fetch_array();
                                         $real = $r_row['buying'];
                                         ?>
@@ -169,7 +173,7 @@ if (strlen($_SESSION['email']) == 0) {
                                     </div>
                                     <div class="acc-action">
                                         <?php
-                                        $q_query = $con->query("SELECT SUM(selling * quantity) as 'selling' FROM stocks");
+                                        $q_query = $con->query("SELECT SUM(selling * quantity) as 'selling' FROM stocks $facility_filter");
                                         $q_row = $q_query->fetch_array();
                                         $real = $q_row['selling'];
                                         ?>
