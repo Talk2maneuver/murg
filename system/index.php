@@ -103,12 +103,21 @@ if (empty($_SESSION['email'])) {
                                 <div class="wallet-balance">
                                     <p>Total Sales</p>
                                     <?php
-                                    $yearly_sales_query = $con->query("SELECT SUM(net_total) as total FROM orders");
-                                    $yearly_sales_row = $yearly_sales_query->fetch_assoc();
+                                    // Calculate total sales using same method as report.php
+                                    $yearly_sales_query = $con->query("SELECT SUM(CAST(subtotal AS DECIMAL(10,2)) - (CAST(item_discount AS DECIMAL(10,2)) * CAST(quantity AS INT))) as total_sales FROM orders");
+                                    $yearly_sales_data = $yearly_sales_query->fetch_assoc();
+                                    $yearly_sales = $yearly_sales_data['total_sales'] ?? 0;
+                                    
+                                    $yearly_discount_query = $con->query("SELECT SUM(CAST(discount AS DECIMAL(10,2))) as total_discount FROM (SELECT orderID, discount FROM orders GROUP BY orderID) as t");
+                                    $yearly_discount_data = $yearly_discount_query->fetch_assoc();
+                                    $yearly_discount = $yearly_discount_data['total_discount'] ?? 0;
+                                    
+                                    $yearly_net_sales = $yearly_sales - $yearly_discount;
+                                    
                                     $yearly_expense_query = $con->query("SELECT SUM(price) as total FROM expense");
                                     $yearly_expense_row = $yearly_expense_query->fetch_assoc();
                                     ?>
-                                    <h5><span class="w-currency">₦</span><?php echo number_format(($yearly_sales_row['total'] ?? 0) - ($yearly_expense_row['total'] ?? 0)); ?></h5>
+                                    <h5><span class="w-currency">₦</span><?php echo number_format($yearly_net_sales - ($yearly_expense_row['total'] ?? 0)); ?></h5>
                                 </div>
                             </div>
                             <div class="widget-amount">
@@ -124,41 +133,59 @@ if (empty($_SESSION['email'])) {
                                 
                                 $month = date('m');
                                 if ($facilityID) {
-                                    $monthly_sales_query = $con->query("SELECT SUM(subtotal) as total FROM orders WHERE MONTH(creation) = '$month'");
-                                    $monthly_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE MONTH(creation) = '$month'");
-                                    $monthly_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE MONTH(creation) = '$month'");
+                                    $monthly_sales_query = $con->query("SELECT SUM(CAST(subtotal AS DECIMAL(10,2)) - (CAST(item_discount AS DECIMAL(10,2)) * CAST(quantity AS INT))) as total_sales FROM orders WHERE MONTH(creation) = '$month' AND facilityID = '$facilityID'");
+                                    $monthly_discount_query = $con->query("SELECT SUM(CAST(discount AS DECIMAL(10,2))) as total_discount FROM (SELECT orderID, discount FROM orders WHERE MONTH(creation) = '$month' AND facilityID = '$facilityID' GROUP BY orderID) as t");
+                                    $monthly_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE MONTH(creation) = '$month' AND facilityID = '$facilityID'");
+                                    $monthly_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE MONTH(creation) = '$month' AND facilityID = '$facilityID'");
                                 } else {
-                                    $monthly_sales_query = $con->query("SELECT SUM(subtotal) as total FROM orders WHERE MONTH(creation) = '$month'");
+                                    $monthly_sales_query = $con->query("SELECT SUM(CAST(subtotal AS DECIMAL(10,2)) - (CAST(item_discount AS DECIMAL(10,2)) * CAST(quantity AS INT))) as total_sales FROM orders WHERE MONTH(creation) = '$month'");
+                                    $monthly_discount_query = $con->query("SELECT SUM(CAST(discount AS DECIMAL(10,2))) as total_discount FROM (SELECT orderID, discount FROM orders WHERE MONTH(creation) = '$month' GROUP BY orderID) as t");
                                     $monthly_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE MONTH(creation) = '$month'");
                                     $monthly_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE MONTH(creation) = '$month'");
                                 }
                                 
-                                $monthly_sales_row = $monthly_sales_query->fetch_assoc();
+                                $monthly_sales_data = $monthly_sales_query->fetch_assoc();
+                                $monthly_sales = $monthly_sales_data['total_sales'] ?? 0;
+                                
+                                $monthly_discount_data = $monthly_discount_query->fetch_assoc();
+                                $monthly_discount = $monthly_discount_data['total_discount'] ?? 0;
+                                
+                                $monthly_net_sales = $monthly_sales - $monthly_discount;
+                                
                                 $monthly_expense_row = $monthly_expense_query->fetch_assoc();
                                 $monthly_payment_row = $monthly_payment_query->fetch_assoc();
                                 
                                 $today = date('Y-m-d');
                                 if ($facilityID) {
-                                    $daily_sales_query = $con->query("SELECT SUM(subtotal) as total FROM orders WHERE DATE(creation) = '$today'");
-                                    $daily_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE DATE(creation) = '$today'");
-                                    $daily_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE DATE(creation) = '$today'");
+                                    $daily_sales_query = $con->query("SELECT SUM(CAST(subtotal AS DECIMAL(10,2)) - (CAST(item_discount AS DECIMAL(10,2)) * CAST(quantity AS INT))) as total_sales FROM orders WHERE DATE(creation) = '$today' AND facilityID = '$facilityID'");
+                                    $daily_discount_query = $con->query("SELECT SUM(CAST(discount AS DECIMAL(10,2))) as total_discount FROM (SELECT orderID, discount FROM orders WHERE DATE(creation) = '$today' AND facilityID = '$facilityID' GROUP BY orderID) as t");
+                                    $daily_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE DATE(creation) = '$today' AND facilityID = '$facilityID'");
+                                    $daily_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE DATE(creation) = '$today' AND facilityID = '$facilityID'");
                                 } else {
-                                    $daily_sales_query = $con->query("SELECT SUM(subtotal) as total FROM orders WHERE DATE(creation) = '$today'");
+                                    $daily_sales_query = $con->query("SELECT SUM(CAST(subtotal AS DECIMAL(10,2)) - (CAST(item_discount AS DECIMAL(10,2)) * CAST(quantity AS INT))) as total_sales FROM orders WHERE DATE(creation) = '$today'");
+                                    $daily_discount_query = $con->query("SELECT SUM(CAST(discount AS DECIMAL(10,2))) as total_discount FROM (SELECT orderID, discount FROM orders WHERE DATE(creation) = '$today' GROUP BY orderID) as t");
                                     $daily_expense_query = $con->query("SELECT SUM(price) as total FROM expense WHERE DATE(creation) = '$today'");
                                     $daily_payment_query = $con->query("SELECT SUM(cash) as cash_total, SUM(pos) as pos_total, SUM(transfer) as transfer_total FROM orders WHERE DATE(creation) = '$today'");
                                 }
                                 
-                                $daily_sales_row = $daily_sales_query->fetch_assoc();
+                                $daily_sales_data = $daily_sales_query->fetch_assoc();
+                                $daily_sales = $daily_sales_data['total_sales'] ?? 0;
+                                
+                                $daily_discount_data = $daily_discount_query->fetch_assoc();
+                                $daily_discount = $daily_discount_data['total_discount'] ?? 0;
+                                
+                                $daily_net_sales = $daily_sales - $daily_discount;
+                                
                                 $daily_expense_row = $daily_expense_query->fetch_assoc();
                                 $daily_payment_row = $daily_payment_query->fetch_assoc();
                                 ?>
                                 <div class="w-a-info funds-received">
                                     <span>Sales For <b><?php echo date('F Y'); ?></b></span>
-                                    <p>₦<?php echo number_format(($monthly_sales_row['total'] ?? 0) - ($monthly_expense_row['total'] ?? 0)); ?></p>
+                                    <p>₦<?php echo number_format($monthly_net_sales - ($monthly_expense_row['total'] ?? 0)); ?></p>
                                 </div>
                                 <div class="w-a-info funds-spent">
                                     <span>Sales For <b><?php echo date('l (d-m-Y)'); ?></b></span>
-                                    <p>₦<?php echo number_format(($daily_sales_row['total'] ?? 0) - ($daily_expense_row['total'] ?? 0)); ?></p>
+                                    <p>₦<?php echo number_format($daily_net_sales - ($daily_expense_row['total'] ?? 0)); ?></p>
                                 </div>
                             </div>
                         </div>
